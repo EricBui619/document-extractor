@@ -415,7 +415,7 @@ def display_results(results, report):
                 data=html_content,
                 file_name=Path(results['final_html']).name,
                 mime="text/html",
-                use_container_width=True
+                width='stretch'
             )
 
     with col2:
@@ -426,7 +426,7 @@ def display_results(results, report):
             data=report_json,
             file_name="processing_report.json",
             mime="application/json",
-            use_container_width=True
+            width='stretch'
         )
 
     st.divider()
@@ -446,7 +446,7 @@ def display_results(results, report):
                 # Show PNG preview
                 png_path = results['png_pages'][page_num - 1]
                 if os.path.exists(png_path):
-                    st.image(png_path, caption=f"Page {page_num} PNG", use_container_width=True)
+                    st.image(png_path, caption=f"Page {page_num} PNG", width='stretch')
 
             with col2:
                 st.markdown(f"""
@@ -530,7 +530,7 @@ def main():
         """, unsafe_allow_html=True)
 
         # Process button
-        if st.button("🚀 Process PDF", type="primary", use_container_width=True):
+        if st.button("🚀 Process PDF", type="primary", width='stretch'):
             if not settings['api_key']:
                 st.error("Please provide an OpenAI API key in the sidebar!")
             else:
@@ -549,7 +549,7 @@ def main():
         display_results(st.session_state.results, st.session_state.report)
 
         # Reset button
-        if st.button("🔄 Process Another PDF", use_container_width=True):
+        if st.button("🔄 Process Another PDF", width='stretch'):
             st.session_state.processing_complete = False
             st.session_state.results = None
             st.session_state.report = None
