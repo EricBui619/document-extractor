@@ -397,7 +397,7 @@ class HTMLPageGenerator:
         """
         Render image in flow layout - EMBEDS ALL IMAGES
         Extracts and embeds all visual content (charts, diagrams, shapes, photos, logos, everything)
-        Uses file references instead of base64 for better performance
+        Uses base64 embedding for self-contained HTML files (works on Streamlit Cloud)
         """
         description = image.get('description', 'Image')
         caption = image.get('caption', '')
@@ -412,19 +412,25 @@ class HTMLPageGenerator:
 
         # EMBED ALL IMAGES - no filtering, extract everything
         if image_data:
-            # Legacy: Base64 embedded image (not recommended, large file size)
+            # Legacy: Base64 embedded image
             parts.append(f'            <img src="{image_data}" alt="{description}" class="embedded-image" />')
+            print(f"      ✓ Embedded image (legacy base64): {description[:50]}...")
         elif image_path and os.path.exists(image_path):
-            # NEW: Use file reference instead of base64 (smaller HTML, faster loading)
-            if html_output_path:
-                # Calculate relative path for portability
-                rel_path = self._get_relative_image_path(image_path, html_output_path)
+            # NEW: Embed as base64 for self-contained HTML (works on Streamlit Cloud)
+            base64_data = self.embed_image_as_base64(image_path)
+            if base64_data:
+                parts.append(f'            <img src="{base64_data}" alt="{description}" class="embedded-image" />')
+                print(f"      ✓ Embedded image as base64: {Path(image_path).name}")
             else:
-                # Use absolute path as fallback
-                rel_path = image_path.replace('\\', '/')
-
-            parts.append(f'            <img src="{rel_path}" alt="{description}" class="embedded-image" />')
-            print(f"      ✓ Added image to HTML: {Path(image_path).name}")
+                # Fallback to file reference if base64 encoding fails
+                if html_output_path:
+                    # Calculate relative path for portability
+                    rel_path = self._get_relative_image_path(image_path, html_output_path)
+                else:
+                    # Use absolute path as fallback
+                    rel_path = image_path.replace('\\', '/')
+                parts.append(f'            <img src="{rel_path}" alt="{description}" class="embedded-image" />')
+                print(f"      ⚠ Using file reference for: {Path(image_path).name}")
         else:
             # Fallback to placeholder with description if no image file available
             # DEBUG: Show why image wasn't embedded
