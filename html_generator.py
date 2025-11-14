@@ -20,6 +20,7 @@ class HTMLPageGenerator:
         """
         self.page_width = page_width
         self.page_height = page_height
+        self._base64_cache = {}  # Cache for base64 encoded images (performance optimization)
 
     def generate_page_html(self, content: Dict, page_info: Dict, output_path: str = None) -> str:
         """
@@ -711,7 +712,16 @@ class HTMLPageGenerator:
         return {'left': left, 'top': top}
 
     def embed_image_as_base64(self, image_path: str) -> str:
-        """Embed image as base64 data URL"""
+        """
+        Embed image as base64 data URL with caching
+
+        Performance optimization: Caches encoded images to avoid re-encoding
+        the same image for individual pages and multi-page HTML
+        """
+        # Check cache first
+        if image_path in self._base64_cache:
+            return self._base64_cache[image_path]
+
         try:
             with open(image_path, 'rb') as img_file:
                 img_data = base64.b64encode(img_file.read()).decode('utf-8')
@@ -726,7 +736,10 @@ class HTMLPageGenerator:
                 '.svg': 'image/svg+xml'
             }.get(ext, 'image/png')
 
-            return f"data:{mime_type};base64,{img_data}"
+            result = f"data:{mime_type};base64,{img_data}"
+            # Cache the result
+            self._base64_cache[image_path] = result
+            return result
         except Exception as e:
             print(f"  ✗ Error embedding image: {str(e)}")
             return ""

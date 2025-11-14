@@ -214,9 +214,9 @@ def display_sidebar(uploaded_file=None):
             "Parallel Processing Threads",
             min_value=1,
             max_value=8,
-            value=4,
+            value=2,  # Default to 2 for Streamlit Cloud (typically 1-2 CPU cores)
             step=1,
-            help="Number of pages to process simultaneously. More threads = faster but higher API rate limit usage"
+            help="Number of pages to process simultaneously. Streamlit Cloud: Use 2-3. Local: Use 4-8. More threads = faster but higher memory usage and API rate limits"
         )
 
         st.divider()

@@ -89,10 +89,16 @@ class PDFtoPNGConverter:
                 # Render page to pixmap (image)
                 pix = page.get_pixmap(matrix=mat, alpha=False)
 
-                # Save as PNG
+                # Save as PNG with compression (performance optimization)
                 png_filename = f"page_{page_num + 1}.png"
                 png_path = output_dir / png_filename
-                pix.save(png_path)
+
+                # Convert to PIL Image for better compression
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
+                # Save with optimization and compression
+                # compress_level 6 provides good balance between speed and size reduction
+                img.save(png_path, format='PNG', optimize=True, compress_level=6)
 
                 # Store page information
                 page_info = {

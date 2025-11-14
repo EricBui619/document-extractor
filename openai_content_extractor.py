@@ -23,11 +23,24 @@ class OpenAIContentExtractor:
         """
         self.client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY"))
         self.model = model
+        self._base64_cache = {}  # Cache for base64 encoded images (performance optimization)
 
     def encode_image_to_base64(self, image_path: str) -> str:
-        """Encode image to base64 string for API"""
+        """
+        Encode image to base64 string for API with caching
+
+        Performance optimization: Caches encoded images to avoid re-encoding
+        the same image multiple times (e.g., for table refinement calls)
+        """
+        # Check cache first
+        if image_path in self._base64_cache:
+            return self._base64_cache[image_path]
+
+        # Encode and cache
         with open(image_path, "rb") as image_file:
-            return base64.b64encode(image_file.read()).decode("utf-8")
+            encoded = base64.b64encode(image_file.read()).decode("utf-8")
+            self._base64_cache[image_path] = encoded
+            return encoded
 
     def extract_page_content(self, image_path: str, page_num: int) -> Dict:
         """

@@ -181,13 +181,32 @@ class PDFProcessor:
                     self._link_images_to_content(content, visual_images)
                     print(f"  ✓ Page {page_num}: Linked {len(visual_images)} visual diagrams")
 
-                # Refine tables if requested
+                # Refine tables if requested (in parallel for multiple tables)
                 if refine_tables and content.get('tables'):
-                    for table in content['tables']:
-                        table['html'] = self.content_extractor.refine_table_structure(
-                            table['html'],
+                    tables = content['tables']
+                    if len(tables) == 1:
+                        # Single table, process directly
+                        tables[0]['html'] = self.content_extractor.refine_table_structure(
+                            tables[0]['html'],
                             png_path
                         )
+                    else:
+                        # Multiple tables, refine in parallel
+                        from concurrent.futures import ThreadPoolExecutor as TableExecutor, as_completed as tables_completed
+                        with TableExecutor(max_workers=min(4, len(tables))) as table_executor:
+                            table_futures = {}
+                            for idx, table in enumerate(tables):
+                                future = table_executor.submit(
+                                    self.content_extractor.refine_table_structure,
+                                    table['html'],
+                                    png_path
+                                )
+                                table_futures[future] = idx
+
+                            # Collect refined tables
+                            for future in tables_completed(table_futures):
+                                idx = table_futures[future]
+                                tables[idx]['html'] = future.result()
 
                 # Save content to JSON
                 content_path = self.content_dir / f"page_{page_num}_content.json"
