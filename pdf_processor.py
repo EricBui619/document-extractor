@@ -18,6 +18,7 @@ from openai_content_extractor import OpenAIContentExtractor
 from html_generator import HTMLPageGenerator
 from html_to_pdf_converter import HTMLtoPDFConverter
 from image_processor import ImageProcessor
+from content_structure_fixer import ContentStructureFixer
 from key_value_converter import KeyValueConverter
 from html_formatter import HTMLFormatter
 
@@ -48,6 +49,7 @@ class PDFProcessor:
         self.image_processor = ImageProcessor()
         self.kv_converter = KeyValueConverter()
         self.html_formatter = HTMLFormatter()
+        self.structure_fixer = ContentStructureFixer()
 
         # Create subdirectories
         self.png_dir = self.output_dir / "png_pages"
@@ -170,7 +172,10 @@ class PDFProcessor:
                 # Extract content (AI detects all text, tables, and visual elements)
                 content = self.content_extractor.extract_page_content(png_path, page_num)
 
-                # Step 3.0: Convert key-value pair text blocks to tables
+                # Step 3.0: Fix content structure (section-table ordering, etc.)
+                content = self.structure_fixer.fix_content_structure(content)
+
+                # Step 3.1: Convert key-value pair text blocks to tables
                 content = self.kv_converter.process_extracted_content(content)
 
                 # Step 3.1: Extract visual regions from page PNG
