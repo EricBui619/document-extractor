@@ -1,0 +1,91 @@
+# ================================================================
+# PDF Document Extractor - Requirements
+# ================================================================
+#
+# QUICK START (Pure Python - No System Dependencies):
+#   pip install -r requirements.txt
+#
+# OUTPUT MODE: HTML only (100% functional, no PDF conversion)
+# For PDF output, see "PDF Conversion Options" below
+#
+# ================================================================
+
+# -------------------- CORE DEPENDENCIES --------------------
+# These work on all platforms with pip only
+
+streamlit>=1.28.0           # Web interface
+openai>=1.3.0               # AI content extraction
+python-dotenv>=1.0.0        # Environment variables
+
+# -------------------- PDF PROCESSING --------------------
+PyMuPDF>=1.23.0             # PDF to PNG conversion (works perfectly!)
+Pillow>=10.0.0              # Image manipulation
+PyPDF2>=3.0.0               # PDF merging
+
+# -------------------- DATA HANDLING --------------------
+opencv-python>=4.8.0        # Computer vision
+numpy>=1.24.0               # Numerical operations
+pyarrow>=22.0.0             # Streamlit data handling
+tqdm>=4.0.0                 # Progress bars
+
+# -------------------- HTML PROCESSING --------------------
+beautifulsoup4>=4.12.0      # HTML parsing and formatting
+
+# ================================================================
+# PDF CONVERSION OPTIONS
+# ================================================================
+#
+# IMPORTANT: HTML-to-PDF conversion requires system dependencies.
+# The system works PERFECTLY without PDF conversion (HTML output).
+#
+# Choose ONE option based on your needs:
+#
+# ----------------------------------------------------------------
+# OPTION 1: Skip PDF Conversion (RECOMMENDED for pip-only install)
+# ----------------------------------------------------------------
+# - Set html_method="skip" in the Streamlit app
+# - Output: HTML files with perfect content extraction
+# - No system dependencies needed
+# - 100% pure Python installation
+#
+# ----------------------------------------------------------------
+# OPTION 2: Use Docker (BEST for team distribution)
+# ----------------------------------------------------------------
+# - Handles ALL system dependencies automatically
+# - One-command deployment: docker-compose up
+# - See DOCKER_DEPLOYMENT.md for instructions
+# - No manual installation needed
+#
+# ----------------------------------------------------------------
+# OPTION 3: Install WeasyPrint (HIGH QUALITY PDF OUTPUT)
+# ----------------------------------------------------------------
+# Requires system libraries first:
+#
+#   macOS:
+#     brew install cairo pango gdk-pixbuf libffi
+#
+#   Ubuntu/Debian:
+#     sudo apt-get install libcairo2 libpango-1.0-0 libgdk-pixbuf2.0-0 libffi-dev
+#
+#   Windows:
+#     Download GTK3 runtime from: https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer
+#
+# Then install Python packages:
+#   pip install weasyprint cssselect2 tinycss2 pydyf pyphen brotli fonttools cffi
+#
+# Uncomment below if using this option:
+# weasyprint>=60.0
+# cssselect2>=0.7.0
+# tinycss2>=1.2.0
+# pydyf>=0.8.0
+# pyphen>=0.14.0
+# brotli>=1.0.9
+# fonttools>=4.0.0
+# cffi>=1.15.0
+#
+# ================================================================
+
+# -------------------- DEVELOPMENT TOOLS (OPTIONAL) --------------------
+# pytest>=7.4.0
+# black>=23.0.0
+# flake8>=6.0.0
