@@ -7,23 +7,32 @@ Focuses on 100% structure preservation and proper reading order
 import os
 import base64
 import json
+import time
 from typing import List, Dict, Optional
 from pathlib import Path
 from openai import OpenAI
+import openai
 
 
 class OpenAIContentExtractor:
-    def __init__(self, api_key: str = None, model: str = "gpt-4o"):
+    def __init__(self, api_key: str = None, model: str = "gpt-4o", timeout: int = 120, max_retries: int = 3):
         """
         Initialize OpenAI content extractor
 
         Args:
             api_key: OpenAI API key (default: reads from OPENAI_API_KEY env variable)
             model: OpenAI model to use (default: gpt-4o for vision capabilities)
+            timeout: Timeout for API calls in seconds (default: 120)
+            max_retries: Maximum number of retries for failed API calls (default: 3)
         """
-        self.client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY"))
+        self.client = OpenAI(
+            api_key=api_key or os.environ.get("OPENAI_API_KEY"),
+            timeout=timeout  # Set timeout for all API calls
+        )
         self.model = model
+        self.max_retries = max_retries
         self._base64_cache = {}  # Cache for base64 encoded images (performance optimization)
+        self._cache_size_limit = 50  # Limit cache to 50 images to prevent memory issues
 
     def encode_image_to_base64(self, image_path: str) -> str:
         """
@@ -31,10 +40,19 @@ class OpenAIContentExtractor:
 
         Performance optimization: Caches encoded images to avoid re-encoding
         the same image multiple times (e.g., for table refinement calls)
+        Memory management: Limits cache size to prevent memory exhaustion
         """
         # Check cache first
         if image_path in self._base64_cache:
             return self._base64_cache[image_path]
+
+        # Clear cache if it's too large (prevent memory issues with many pages)
+        if len(self._base64_cache) >= self._cache_size_limit:
+            # Clear oldest entries (simple FIFO)
+            keys_to_remove = list(self._base64_cache.keys())[:10]
+            for key in keys_to_remove:
+                del self._base64_cache[key]
+            print(f"  🧹 Cleared base64 cache (was {self._cache_size_limit} items)")
 
         # Encode and cache
         with open(image_path, "rb") as image_file:
@@ -201,67 +219,92 @@ Your JSON must be:
 NOT:
   "content": "Line 1 Line 2 Line 3"  ← WRONG! Do not concatenate across newlines!"""
 
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": prompt
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/png;base64,{base64_image}",
-                                    "detail": "high"
+        # Retry logic with exponential backoff for API resilience
+        last_error = None
+        for attempt in range(self.max_retries):
+            try:
+                if attempt > 0:
+                    wait_time = 2 ** attempt  # Exponential backoff: 2, 4, 8 seconds
+                    print(f"  ⏳ Retry attempt {attempt + 1}/{self.max_retries} after {wait_time}s...")
+                    time.sleep(wait_time)
+
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": prompt
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:image/png;base64,{base64_image}",
+                                        "detail": "high"
+                                    }
                                 }
-                            }
-                        ]
-                    }
-                ],
-                max_tokens=4096,
-                temperature=0  # Deterministic for accuracy
-            )
-
-            result = response.choices[0].message.content
-
-            # Parse JSON response
-            content = self._parse_json_response(result)
-            content['page_num'] = page_num
-
-            # Sort content items by reading order
-            if 'content_items' in content:
-                content['content_items'] = sorted(
-                    content['content_items'],
-                    key=lambda x: (x.get('order', 999), x.get('position', {}).get('y_start', 0))
+                            ]
+                        }
+                    ],
+                    max_tokens=4096,
+                    temperature=0  # Deterministic for accuracy
                 )
 
-            # Convert to legacy format for compatibility
-            legacy_content = self._convert_to_legacy_format(content)
+                result = response.choices[0].message.content
+                break  # Success, exit retry loop
 
-            items_count = len(content.get('content_items', []))
-            tables_count = sum(1 for item in content.get('content_items', []) if item.get('type') == 'table')
-            images_count = sum(1 for item in content.get('content_items', []) if item.get('type') == 'image')
+            except openai.RateLimitError as e:
+                last_error = e
+                print(f"  ⚠ Rate limit hit on page {page_num}, waiting before retry...")
+                if attempt == self.max_retries - 1:
+                    raise  # Re-raise on last attempt
+                time.sleep(10)  # Wait longer for rate limits
+                continue
 
-            print(f"  ✓ Extracted {items_count} content items in reading order")
-            print(f"  ✓ Found {tables_count} tables, {images_count} images")
+            except openai.APITimeoutError as e:
+                last_error = e
+                print(f"  ⚠ API timeout on page {page_num}, retrying...")
+                if attempt == self.max_retries - 1:
+                    raise
+                continue
 
-            return legacy_content
+            except openai.APIConnectionError as e:
+                last_error = e
+                print(f"  ⚠ API connection error on page {page_num}, retrying...")
+                if attempt == self.max_retries - 1:
+                    raise
+                continue
 
-        except Exception as e:
-            print(f"  ✗ Error extracting content from page {page_num}: {str(e)}")
-            return {
-                'page_num': page_num,
-                'content_items': [],
-                'tables': [],
-                'images': [],
-                'text_blocks': [],
-                'layout': {},
-                'error': str(e)
-            }
+            except Exception as e:
+                # For other errors, don't retry
+                last_error = e
+                print(f"  ✗ Unexpected error on page {page_num}: {type(e).__name__}: {str(e)}")
+                raise
+
+        # Parse JSON response
+        content = self._parse_json_response(result)
+        content['page_num'] = page_num
+
+        # Sort content items by reading order
+        if 'content_items' in content:
+            content['content_items'] = sorted(
+                content['content_items'],
+                key=lambda x: (x.get('order', 999), x.get('position', {}).get('y_start', 0))
+            )
+
+        # Convert to legacy format for compatibility
+        legacy_content = self._convert_to_legacy_format(content)
+
+        items_count = len(content.get('content_items', []))
+        tables_count = sum(1 for item in content.get('content_items', []) if item.get('type') == 'table')
+        images_count = sum(1 for item in content.get('content_items', []) if item.get('type') == 'image')
+
+        print(f"  ✓ Extracted {items_count} content items in reading order")
+        print(f"  ✓ Found {tables_count} tables, {images_count} images")
+
+        return legacy_content
 
     def _convert_to_legacy_format(self, content: Dict) -> Dict:
         """Convert new content format to legacy format for backward compatibility"""

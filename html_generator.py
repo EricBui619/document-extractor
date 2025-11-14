@@ -21,6 +21,7 @@ class HTMLPageGenerator:
         self.page_width = page_width
         self.page_height = page_height
         self._base64_cache = {}  # Cache for base64 encoded images (performance optimization)
+        self._cache_size_limit = 50  # Limit cache to prevent memory issues with many pages
 
     def generate_page_html(self, content: Dict, page_info: Dict, output_path: str = None) -> str:
         """
@@ -51,8 +52,9 @@ class HTMLPageGenerator:
             output_path = Path(output_path)
             output_path.parent.mkdir(exist_ok=True, parents=True)
 
-        # Generate HTML content (pass output_path for relative image paths)
-        html_content = self._build_html(content, page_info, str(output_path))
+        # Generate HTML content using flow layout (respects content order)
+        # This ensures section headings appear before their tables
+        html_content = self._build_flow_html(content, page_info, str(output_path))
 
         # Write HTML to file
         with open(output_path, 'w', encoding='utf-8') as f:
@@ -61,8 +63,43 @@ class HTMLPageGenerator:
         print(f"  ✓ HTML saved to: {output_path}")
         return str(output_path)
 
+    def _build_flow_html(self, content: Dict, page_info: Dict, html_output_path: str = None) -> str:
+        """Build complete HTML document with flow layout (respects content order)"""
+        page_num = content.get('page_num', 1)
+
+        # Update page dimensions
+        if page_info:
+            self.page_width = page_info.get('original_width', self.page_width)
+            self.page_height = page_info.get('original_height', self.page_height)
+
+        html_parts = [
+            '<!DOCTYPE html>',
+            '<html lang="en">',
+            '<head>',
+            '    <meta charset="UTF-8">',
+            '    <meta name="viewport" content="width=device-width, initial-scale=1.0">',
+            f'    <title>Page {page_num}</title>',
+            self._generate_flow_css(),
+            '</head>',
+            '<body>',
+            '    <div class="page">',
+        ]
+
+        # Use flow layout body
+        page_body = self._build_page_body(content, page_info, html_output_path)
+        html_parts.append(page_body)
+
+        # Close HTML
+        html_parts.extend([
+            '    </div>',
+            '</body>',
+            '</html>'
+        ])
+
+        return '\n'.join(html_parts)
+
     def _build_html(self, content: Dict, page_info: Dict, html_output_path: str = None) -> str:
-        """Build complete HTML document with absolute positioning from extracted content"""
+        """Build complete HTML document with absolute positioning from extracted content (DEPRECATED - use _build_flow_html)"""
         page_num = content.get('page_num', 1)
 
         html_parts = [
@@ -357,7 +394,8 @@ class HTMLPageGenerator:
 
     def _render_table_flow(self, table: Dict) -> str:
         """Render table in flow layout"""
-        table_html = table.get('html', '')
+        # Support both content_items format (uses 'content') and legacy format (uses 'html')
+        table_html = table.get('html', table.get('content', ''))
         caption = table.get('caption', '')
 
         parts = ['        <div class="table-container">']
@@ -722,6 +760,13 @@ class HTMLPageGenerator:
         if image_path in self._base64_cache:
             return self._base64_cache[image_path]
 
+        # Clear cache if it's too large (prevent memory issues with many pages)
+        if len(self._base64_cache) >= self._cache_size_limit:
+            keys_to_remove = list(self._base64_cache.keys())[:10]
+            for key in keys_to_remove:
+                del self._base64_cache[key]
+            print(f"  🧹 Cleared HTML base64 cache (was {self._cache_size_limit} items)")
+
         try:
             with open(image_path, 'rb') as img_file:
                 img_data = base64.b64encode(img_file.read()).decode('utf-8')
@@ -787,27 +832,46 @@ class HTMLPageGenerator:
         return str(output_path)
 
     def _build_page_body(self, content: Dict, page_info: Dict, html_output_path: str = None) -> str:
-        """Build HTML body content for a single page with flow layout"""
-        # Collect all content items with their positions for sorting
-        all_items = []
+        """Build HTML body content for a single page with flow layout (respects content_items order)"""
 
-        for text_block in content.get('text_blocks', []):
-            pos = text_block.get('position', {})
-            y_pos = pos.get('y_start', 0) if isinstance(pos, dict) else 0
-            all_items.append(('text', text_block, y_pos))
+        # Use content_items if available (preserves corrected order from structure fixer)
+        if 'content_items' in content and content['content_items']:
+            all_items = []
+            for item in content['content_items']:
+                item_type = item.get('type', 'paragraph')
+                order = item.get('order', 999)
 
-        for table in content.get('tables', []):
-            pos = table.get('position', {})
-            y_pos = pos.get('top_percent', 0) if isinstance(pos, dict) else 0
-            all_items.append(('table', table, y_pos))
+                # Map content_item types to rendering types
+                if item_type in ['header', 'paragraph', 'page_header', 'page_footer', 'list', 'caption']:
+                    all_items.append(('text', item, order))
+                elif item_type == 'table':
+                    all_items.append(('table', item, order))
+                elif item_type == 'image':
+                    all_items.append(('image', item, order))
 
-        for image in content.get('images', []):
-            pos = image.get('position', {})
-            y_pos = pos.get('top_percent', 0) if isinstance(pos, dict) else 0
-            all_items.append(('image', image, y_pos))
+            # Sort by order field (preserves structure fixer corrections)
+            all_items.sort(key=lambda x: x[2])
+        else:
+            # Fallback to legacy format if content_items not available
+            all_items = []
 
-        # Sort by vertical position to maintain reading order
-        all_items.sort(key=lambda x: x[2])
+            for text_block in content.get('text_blocks', []):
+                pos = text_block.get('position', {})
+                y_pos = pos.get('y_start', 0) if isinstance(pos, dict) else 0
+                all_items.append(('text', text_block, y_pos))
+
+            for table in content.get('tables', []):
+                pos = table.get('position', {})
+                y_pos = pos.get('top_percent', 0) if isinstance(pos, dict) else 0
+                all_items.append(('table', table, y_pos))
+
+            for image in content.get('images', []):
+                pos = image.get('position', {})
+                y_pos = pos.get('top_percent', 0) if isinstance(pos, dict) else 0
+                all_items.append(('image', image, y_pos))
+
+            # Sort by vertical position
+            all_items.sort(key=lambda x: x[2])
 
         # Render in order using FLOW methods (prevents overlapping)
         parts = []
