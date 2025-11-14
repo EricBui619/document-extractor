@@ -107,6 +107,7 @@ class PDFProcessor:
             'html_pages': [],
             'extracted_images': [],
             'final_pdf': None,
+            'final_html': None,
             'metadata': {}
         }
 
@@ -127,15 +128,16 @@ class PDFProcessor:
             pages_to_process = list(range(1, total_pages + 1))
             print(f"📄 Processing all pages: 1-{total_pages}")
 
-        # Step 2: Convert PDF to PNG images
+        # Step 2: Convert PDF to PNG images (only selected pages for efficiency)
         self._update_progress(progress_callback, 10, f"Converting PDF to PNG images ({len(pages_to_process)} pages)")
         page_info_list = self.pdf_to_png.convert_pdf_to_pngs(
             str(pdf_path),
-            str(self.png_dir)
+            str(self.png_dir),
+            pages=pages_to_process  # Only convert selected pages
         )
 
-        # Filter to only selected pages
-        filtered_page_info_list = [page_info_list[p - 1] for p in pages_to_process]
+        # No need to filter - page_info_list already contains only selected pages
+        filtered_page_info_list = page_info_list
         results['png_pages'] = [info['png_path'] for info in filtered_page_info_list]
         print(f"✓ Step 1 Complete: {len(filtered_page_info_list)} PNG pages created")
 
@@ -328,6 +330,7 @@ class PDFProcessor:
             filtered_page_info_list,
             str(multi_page_html)
         )
+        results['final_html'] = str(multi_page_html)
         print(f"✓ Multi-page HTML created: {multi_page_html.name}")
 
         # Format the multi-page HTML as well

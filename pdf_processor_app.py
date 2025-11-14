@@ -406,15 +406,15 @@ def display_results(results, report):
     col1, col2 = st.columns(2)
 
     with col1:
-        # Download reconstructed PDF
-        if results['final_pdf'] and os.path.exists(results['final_pdf']):
-            with open(results['final_pdf'], 'rb') as f:
-                pdf_bytes = f.read()
+        # Download extracted HTML
+        if results.get('final_html') and os.path.exists(results['final_html']):
+            with open(results['final_html'], 'r', encoding='utf-8') as f:
+                html_content = f.read()
             st.download_button(
-                label="⬇️ Download Reconstructed PDF",
-                data=pdf_bytes,
-                file_name=Path(results['final_pdf']).name,
-                mime="application/pdf",
+                label="⬇️ Download Extracted HTML",
+                data=html_content,
+                file_name=Path(results['final_html']).name,
+                mime="text/html",
                 use_container_width=True
             )
 

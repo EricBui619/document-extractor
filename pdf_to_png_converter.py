@@ -21,13 +21,14 @@ class PDFtoPNGConverter:
         self.dpi = dpi
         self.zoom = dpi / 72  # PDF default is 72 DPI
 
-    def convert_pdf_to_pngs(self, pdf_path: str, output_dir: str = None) -> List[dict]:
+    def convert_pdf_to_pngs(self, pdf_path: str, output_dir: str = None, pages: List[int] = None) -> List[dict]:
         """
-        Convert all pages of a PDF to PNG images
+        Convert all pages or selected pages of a PDF to PNG images
 
         Args:
             pdf_path: Path to the input PDF file
             output_dir: Directory to save PNG files (default: creates 'png_pages' folder)
+            pages: Optional list of page numbers to convert (1-indexed). If None, converts all pages.
 
         Returns:
             List of dictionaries containing page information:
@@ -64,9 +65,16 @@ class PDFtoPNGConverter:
 
         try:
             total_pages = len(pdf_document)
-            print(f"Total pages: {total_pages}")
 
-            for page_num in range(total_pages):
+            # Determine which pages to convert
+            if pages is not None:
+                pages_to_convert = [p - 1 for p in pages if 1 <= p <= total_pages]  # Convert to 0-indexed
+                print(f"Total pages: {total_pages}, Converting selected pages: {pages}")
+            else:
+                pages_to_convert = list(range(total_pages))
+                print(f"Total pages: {total_pages}")
+
+            for page_num in pages_to_convert:
                 # Get page
                 page = pdf_document[page_num]
 
@@ -98,7 +106,10 @@ class PDFtoPNGConverter:
                 }
                 page_info_list.append(page_info)
 
-                print(f"  ✓ Page {page_num + 1}/{total_pages}: {png_filename} ({pix.width}x{pix.height})")
+                if pages is not None:
+                    print(f"  ✓ Page {page_num + 1}: {png_filename} ({pix.width}x{pix.height})")
+                else:
+                    print(f"  ✓ Page {page_num + 1}/{total_pages}: {png_filename} ({pix.width}x{pix.height})")
 
         finally:
             pdf_document.close()
